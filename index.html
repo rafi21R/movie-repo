@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Movie Recommender — 100+ per Genre (Demo)</title>
+  <style>
+    :root{ --glass: rgba(255,255,255,0.06); --accent:#ff9800; --muted:rgba(255,255,255,0.75);} 
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,Arial;background:linear-gradient(120deg,#071426 0%, #012238 50%, #08141f 100%);color:#fff;min-height:100vh}
+    /* animated background */
+    .bg{position:fixed;inset:0;z-index:-2;overflow:hidden}
+    .bg:before{content:'';position:absolute;inset:-20% -10% -10% -10%;background:radial-gradient(circle at 10% 20%, rgba(255,150,50,0.06), transparent 8%), radial-gradient(circle at 80% 80%, rgba(50,120,255,0.05), transparent 12%);animation:moveBg 18s linear infinite}
+    @keyframes moveBg{0%{transform:translateY(0)}50%{transform:translateY(-6%)}100%{transform:translateY(0)}}
+
+    header{padding:22px 24px;border-bottom:1px solid rgba(255,255,255,0.03);display:flex;align-items:center;gap:16px}
+    header h1{margin:0;font-size:1.15rem}
+    .container{max-width:1200px;margin:18px auto;padding:0 18px}
+
+    .controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:12px 0}
+    .search{flex:1;min-width:220px}
+    input[type=text],select,textarea{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:#fff}
+    .btn{background:var(--accent);border:none;padding:10px 14px;border-radius:10px;color:#08141f;font-weight:700;cursor:pointer}
+
+    .genres{display:flex;gap:8px;overflow:auto;padding:8px 0;margin-bottom:8px}
+    .chip{padding:8px 12px;border-radius:999px;background:var(--glass);cursor:pointer;white-space:nowrap}
+    .chip.active{box-shadow:0 6px 18px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.04)}
+
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px}
+    .card{background:var(--glass);border-radius:12px;overflow:hidden;cursor:pointer;display:flex;flex-direction:column;min-height:320px}
+    .poster{height:270px;background:#222 center/cover no-repeat;position:relative}
+    .select-overlay{position:absolute;right:8px;bottom:8px;background:rgba(0,0,0,0.6);padding:6px;border-radius:8px;font-size:12px}
+    .info{padding:10px;font-size:13px;flex:1;display:flex;flex-direction:column;gap:6px}
+    .title{font-weight:700}
+    .desc{flex:1;opacity:0.9;font-size:12px;line-height:1.2}
+    .actions{display:flex;gap:8px;align-items:center}
+    .small{font-size:12px;opacity:0.9}
+
+    /* modal */
+    .modal{position:fixed;inset:0;background:rgba(0,0,0,0.75);display:none;align-items:center;justify-content:center;z-index:999}
+    .modal.show{display:flex}
+    .modal-card{width:92%;max-width:1100px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);border-radius:12px;overflow:hidden}
+    .modal-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.03)}
+    .modal-body{display:grid;grid-template-columns:320px 1fr;gap:12px;padding:12px}
+    .leftPane{padding:12px;border-right:1px solid rgba(255,255,255,0.03)}
+    .posterLarge{width:100%;height:440px;background:#111 center/cover no-repeat;border-radius:8px}
+    .meta{margin-top:10px}
+    .reviews{max-height:300px;overflow:auto;padding:8px;background:rgba(0,0,0,0.15);border-radius:8px}
+
+    .footer{padding:16px 0;text-align:center;opacity:0.8}
+
+    @media(max-width:900px){ .modal-body{grid-template-columns:1fr} .posterLarge{height:300px} }
+
+    .loader{display:inline-block;border:3px solid rgba(255,255,255,0.08);border-left-color:var(--accent);width:18px;height:18px;border-radius:50%;animation:spin 1s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body>
+  <div class="bg"></div>
+  <header>
+    <h1>Movie Recommender — 100+ per Genre (Demo)</h1>
+    <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+      <input id="tmdbKey" type="text" placeholder="TMDB API key (optional)" style="width:260px;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:#fff" />
+      <input id="omdbKey" type="text" placeholder="OMDb API key (optional)" style="width:200px;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:#fff" />
+      <button id="loadReal" class="btn" title="Use these keys to fetch real data">Load Real Data</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="controls">
+      <div class="search"><input id="search" type="text" placeholder="Search movies by title or description..." /></div>
+      <div style="width:180px"><select id="sort"><option value="popular">Sort: Popular</option><option value="title">Title</option></select></div>
+      <div style="width:140px"><select id="perPage"><option value="20">20 per page</option><option value="40">40 per page</option><option value="80">80 per page</option></select></div>
+      <button id="resetBtn" class="btn">Reset</button>
+    </div>
+
+    <div id="genreBar" class="genres"></div>
+
+    <div id="list" class="grid"></div>
+
+    <div style="display:flex;justify-content:center;margin-top:14px;gap:8px">
+      <button id="prev" class="chip">Prev</button>
+      <div id="pageInfo" class="small"></div>
+      <button id="next" class="chip">Next</button>
+    </div>
+
+    <div class="footer">This page generates 120 placeholder movies per genre (Hollywood-styled titles) and can optionally fetch real movie data from TMDB and OMDb (API keys required). You can also select/upload an image to replace any poster locally in the UI and add user reviews for any movie (stored locally).</div>
+  </main>
+
+  <!-- modal -->
+  <div id="modal" class="modal" role="dialog">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <strong id="mTitle"></strong>
+          <div id="mGenre" class="small" style="opacity:0.9"></div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button id="downloadBtn" class="btn">Download Poster</button>
+          <button id="closeModal" class="chip">Close</button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div class="leftPane">
+          <div id="posterLarge" class="posterLarge"></div>
+          <div class="meta">
+            <div><strong>IMDb Rating:</strong> <span id="imdbRating">—</span></div>
+            <div style="margin-top:6px"><strong>Runtime / Release:</strong> <span id="metaExtra">—</span></div>
+          </div>
+        </div>
+        <div>
+          <div id="mDesc" style="margin-bottom:10px"></div>
+          <div><strong>Reviews:</strong></div>
+          <div id="reviews" class="reviews"></div>
+
+          <div style="margin-top:10px">
+            <strong>Add your review</strong>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <input id="reviewAuthor" placeholder="Your name" />
+              <select id="reviewRating" style="width:110px;">
+                <option value="5">5 ★</option>
+                <option value="4">4 ★</option>
+                <option value="3">3 ★</option>
+                <option value="2">2 ★</option>
+                <option value="1">1 ★</option>
+              </select>
+            </div>
+            <textarea id="reviewText" rows="3" placeholder="Write your review..."></textarea>
+            <div style="display:flex;gap:8px;margin-top:8px"><button id="addReviewBtn" class="btn">Submit Review</button><button id="clearReviews" class="chip">Clear All Reviews</button></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="imagePicker" accept="image/*" style="display:none" />
+
+  <script>
+    /*****************************************************************
+     * Movie Recommender — single-file app
+     * - Generates 120 demo "Hollywood-styled" movies per genre
+     * - Allows selecting/uploading a local poster image for any movie (client-side, persisted to localStorage)
+     * - Modal shows description, IMDb rating (via OMDb if API key given) and TMDB reviews if TMDB key is provided
+     * - Users can add local reviews for any movie; reviews are stored in localStorage per-movie
+     *****************************************************************/
+
+    const GENRES = ['Action','Sci-Fi','Drama','Comedy','Romance','Thriller','Fantasy','Animation'];
+
+    function generateDemoData(perGenre=120){
+      const data = {};
+      GENRES.forEach(g => {
+        data[g] = [];
+        for (let i=1;i<=perGenre;i++){
+          const idKey = `${g.toLowerCase()}-hollywood-${i}`;
+          data[g].push({
+            id: idKey,
+            title: `${g} Film ${i}`,
+            genre: g,
+            poster: `https://picsum.photos/seed/${encodeURIComponent(idKey)}/500/750`,
+            desc: `A Hollywood-style ${g.toLowerCase()} feature: ${g} Film ${i} — an entertaining story blending genre-expected beats with cinematic flair. Replace with TMDB data for real descriptions.`,
+            tmdbId: null
+          });
+        }
+      });
+      return data;
+    }
+
+    let DATA = generateDemoData(120);
+
+    // UI state
+    let activeGenre = 'All';
+    let currentPage = 1;
+    let perPage = 20;
+    let flatList = [];
+
+    // DOM
+    const genreBar = document.getElementById('genreBar');
+    const list = document.getElementById('list');
+    const search = document.getElementById('search');
+    const sortSel = document.getElementById('sort');
+    const perPageSel = document.getElementById('perPage');
+    const prevBtn = document.getElementById('prev');
+    const nextBtn = document.getElementById('next');
+    const pageInfo = document.getElementById('pageInfo');
+    const modal = document.getElementById('modal');
+    const posterLarge = document.getElementById('posterLarge');
+    const mTitle = document.getElementById('mTitle');
+    const mGenre = document.getElementById('mGenre');
+    const mDesc = document.getElementById('mDesc');
+    const reviewsEl = document.getElementById('reviews');
+    const imdbRatingEl = document.getElementById('imdbRating');
+    const metaExtra = document.getElementById('metaExtra');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const closeModal = document.getElementById('closeModal');
+    const resetBtn = document.getElementById('resetBtn');
+    const loadReal = document.getElementById('loadReal');
+    const tmdbKeyInput = document.getElementById('tmdbKey');
+    const omdbKeyInput = document.getElementById('omdbKey');
+    const imagePicker = document.getElementById('imagePicker');
+    const reviewAuthor = document.getElementById('reviewAuthor');
+    const reviewText = document.getElementById('reviewText');
+    const reviewRating = document.getElementById('reviewRating');
+    const addReviewBtn = document.getElementById('addReviewBtn');
+    const clearReviewsBtn = document.getElementById('clearReviews');
+
+    function renderGenres(){
+      genreBar.innerHTML = '';
+      const allChip = document.createElement('div'); allChip.className='chip'+(activeGenre==='All'?' active':''); allChip.textContent='All';
+      allChip.onclick = ()=>{activeGenre='All'; currentPage=1; render();};
+      genreBar.appendChild(allChip);
+      GENRES.forEach(g => {
+        const d = document.createElement('div'); d.className='chip'+(activeGenre===g?' active':''); d.textContent=g;
+        d.onclick = ()=>{ activeGenre = g; currentPage=1; render(); };
+        genreBar.appendChild(d);
+      });
+    }
+
+    function rebuildFlatList(){
+      const q = search.value.trim().toLowerCase();
+      const genreFilter = activeGenre === 'All' ? null : activeGenre;
+      let arr = [];
+      if (genreFilter) arr = DATA[genreFilter] ? DATA[genreFilter].slice() : [];
+      else { for (const g of Object.keys(DATA)) arr = arr.concat(DATA[g]); }
+      if (q) arr = arr.filter(m => m.title.toLowerCase().includes(q) || (m.desc && m.desc.toLowerCase().includes(q)));
+      if (sortSel.value === 'title') arr.sort((a,b)=> a.title.localeCompare(b.title));
+      flatList = arr;
+    }
+
+    function render(){
+      renderGenres();
+      rebuildFlatList();
+      perPage = parseInt(perPageSel.value) || 20;
+      const total = flatList.length;
+      const pages = Math.max(1, Math.ceil(total / perPage));
+      if (currentPage > pages) currentPage = pages;
+      const start = (currentPage-1)*perPage;
+      const pageItems = flatList.slice(start, start+perPage);
+
+      list.innerHTML = '';
+      for (const m of pageItems){
+        const card = document.createElement('div'); card.className='card';
+        const img = document.createElement('div'); img.className='poster'; img.style.backgroundImage = `url(${m.poster})`;
+        const overlay = document.createElement('div'); overlay.className='select-overlay'; overlay.textContent = 'Select Image';
+        overlay.title = 'Choose an image to replace this poster locally';
+        overlay.onclick = (e)=>{ e.stopPropagation(); openImagePickerFor(m, img); };
+        img.appendChild(overlay);
+
+        const info = document.createElement('div'); info.className='info';
+        info.innerHTML = `<div class='title'>${escapeHtml(m.title)}</div><div class='small'>${escapeHtml(m.genre)}</div><div class='desc'>${escapeHtml(m.desc)}</div>`;
+        const actions = document.createElement('div'); actions.className='actions';
+        const playBtn = document.createElement('button'); playBtn.className='chip'; playBtn.textContent='Details & Reviews';
+        playBtn.onclick = (e)=>{ e.stopPropagation(); openModal(m); };
+        const dlBtn = document.createElement('button'); dlBtn.className='chip'; dlBtn.textContent='Download Poster';
+        dlBtn.onclick = (e)=>{ e.stopPropagation(); downloadImage(m.poster, m.title); };
+        actions.appendChild(playBtn); actions.appendChild(dlBtn);
+        info.appendChild(actions);
+        card.appendChild(img); card.appendChild(info);
+        img.onclick = ()=>openModal(m);
+        list.appendChild(card);
+      }
+
+      pageInfo.textContent = `Page ${currentPage} / ${pages} — ${total} items`;
+    }
+
+    prevBtn.onclick = ()=>{ if (currentPage>1) currentPage--; render(); };
+    nextBtn.onclick = ()=>{ currentPage++; render(); };
+    search.addEventListener('input', ()=>{ currentPage=1; render(); });
+    sortSel.addEventListener('change', ()=>{ render(); });
+    perPageSel.addEventListener('change', ()=>{ currentPage=1; render(); });
+    resetBtn.addEventListener('click', ()=>{ search.value=''; activeGenre='All'; currentPage=1; perPageSel.value='20'; render(); });
+
+    // Image picker flow
+    let currentImageTarget = null;
+    function openImagePickerFor(movie, posterElement){
+      currentImageTarget = { movie, posterElement };
+      imagePicker.value = '';
+      imagePicker.click();
+    }
+    imagePicker.addEventListener('change', (ev)=>{
+      const file = ev.target.files && ev.target.files[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      if (currentImageTarget){
+        currentImageTarget.movie.poster = url;
+        currentImageTarget.posterElement.style.backgroundImage = `url(${url})`;
+        try {
+          const key = 'customPoster|' + currentImageTarget.movie.id;
+          if (file.size < 1024*1024){
+            const fr = new FileReader();
+            fr.onload = ()=>{ try{ localStorage.setItem(key, fr.result); }catch(e){} };
+            fr.readAsDataURL(file);
+          } else { try{ localStorage.setItem(key, url); }catch(e){} }
+        } catch(e){ console.warn('Could not persist selected image', e); }
+      }
+    });
+
+    function rehydrateCustomPosters(){
+      for (const g of Object.keys(DATA)){
+        for (const m of DATA[g]){
+          const key = 'customPoster|' + m.id;
+          const stored = localStorage.getItem(key);
+          if (stored){ m.poster = stored; }
+        }
+      }
+    }
+
+    // Local reviews storage per movie
+    function reviewsKeyFor(movie){ return 'reviews|' + movie.id; }
+    function loadLocalReviews(movie){
+      try { const raw = localStorage.getItem(reviewsKeyFor(movie)); return raw ? JSON.parse(raw) : []; } catch(e){ return []; }
+    }
+    function saveLocalReviews(movie, arr){
+      try { localStorage.setItem(reviewsKeyFor(movie), JSON.stringify(arr)); } catch(e){ console.warn('Could not save reviews', e); }
+    }
+
+    // Modal + review fetching
+    let currentModalMovie = null;
+    async function openModal(m){
+      currentModalMovie = m;
+      mTitle.textContent = m.title;
+      mGenre.textContent = m.genre;
+      mDesc.textContent = m.desc || 'No description available';
+      posterLarge.style.backgroundImage = `url(${m.poster})`;
+      imdbRatingEl.textContent = '—';
+      metaExtra.textContent = '—';
+      reviewsEl.innerHTML = '<div style="opacity:0.9">Loading reviews...</div>';
+      modal.classList.add('show');
+
+      // show local reviews first
+      const local = loadLocalReviews(m);
+      renderLocalReviews(local);
+
+      // Try to fetch OMDb (IMDb rating) if OMDb key provided and we have a title
+      const omdbKey = (omdbKeyInput.value||'').trim();
+      if (omdbKey){
+        try {
+          const q = encodeURIComponent(m.title);
+          const url = `https://www.omdbapi.com/?apikey=${omdbKey}&t=${q}`;
+          const r = await fetch(url);
+          const j = await r.json();
+          if (j && j.Response === 'True'){
+            imdbRatingEl.textContent = j.imdbRating ? `${j.imdbRating} / 10` : 'N/A';
+            metaExtra.textContent = `${j.Runtime || '—'} • ${j.Released || '—'}`;
+          } else {
+            imdbRatingEl.textContent = 'N/A';
+          }
+        } catch (err){ imdbRatingEl.textContent = 'N/A'; }
+      }
+
+      // Fetch TMDB reviews if we have tmdbId and TMDB key
+      if (m.tmdbId && (tmdbKeyInput.value||'').trim()){
+        reviewsEl.innerHTML = '<div style="opacity:0.85">Loading reviews from TMDB (if available)...</div>';
+        try {
+          const tmdbKey = (tmdbKeyInput.value||'').trim();
+          const url = `https://api.themoviedb.org/3/movie/${m.tmdbId}/reviews?api_key=${tmdbKey}&language=en-US&page=1`;
+          const r = await fetch(url);
+          if (r.ok){
+            const j = await r.json();
+            const results = j.results || [];
+            if (results.length === 0) {
+              // keep local reviews rendered
+            } else {
+              // append TMDB reviews above local reviews
+              const tmdbReviews = results.slice(0,8).map(rev=>({author:rev.author, rating: null, text: rev.content}));
+              renderTMDBandLocal(tmdbReviews, loadLocalReviews(m));
+            }
+          }
+        } catch (err){ /* ignore */ }
+      }
+
+      downloadBtn.onclick = ()=> downloadImage(m.poster, m.title);
+    }
+
+    function renderLocalReviews(arr){
+      // if arr empty, show placeholder
+      const tmdbPart = document.getElementById('tmdbPart');
+      reviewsEl.innerHTML = '';
+      if (!arr || arr.length === 0){
+        const el = document.createElement('div'); el.style.opacity='0.85'; el.textContent='No user reviews yet — be the first to add one!'; reviewsEl.appendChild(el);
+      } else {
+        for (const r of arr.slice().reverse()){
+          const el = document.createElement('div');
+          el.style.padding='8px'; el.style.marginBottom='8px'; el.style.background='rgba(255,255,255,0.02)'; el.style.borderRadius='6px';
+          el.innerHTML = `<div style="font-weight:700">${escapeHtml(r.author || 'Anonymous')} <span style='opacity:0.9;font-weight:600;margin-left:8px'>${r.rating?('• '+r.rating+' ★'):''}</span></div><div style='opacity:0.9;margin-top:6px'>${escapeHtml(r.text)}</div><div style='opacity:0.7;font-size:11px;margin-top:6px'>${new Date(r.at).toLocaleString()}</div>`;
+          reviewsEl.appendChild(el);
+        }
+      }
+    }
+
+    function renderTMDBandLocal(tmdbArr, localArr){
+      reviewsEl.innerHTML = '';
+      if (tmdbArr.length){
+        const hdr = document.createElement('div'); hdr.style.opacity='0.85'; hdr.style.marginBottom='6px'; hdr.textContent='TMDB Reviews:'; reviewsEl.appendChild(hdr);
+        for (const r of tmdbArr){
+          const el = document.createElement('div'); el.style.padding='8px'; el.style.marginBottom='8px'; el.style.background='rgba(255,255,255,0.02)'; el.style.borderRadius='6px';
+          el.innerHTML = `<div style="font-weight:700">${escapeHtml(r.author||'TMDB User')}</div><div style='opacity:0.9;margin-top:6px'>${escapeHtml((r.text||'').slice(0,1000))}${(r.text && r.text.length>1000)?'...':''}</div>`;
+          reviewsEl.appendChild(el);
+        }
+      }
+      const hdr2 = document.createElement('div'); hdr2.style.opacity='0.85'; hdr2.style.margin='6px 0'; hdr2.textContent='Local Reviews:'; reviewsEl.appendChild(hdr2);
+      if (!localArr || localArr.length === 0){
+        const el = document.createElement('div'); el.style.opacity='0.85'; el.textContent='No user reviews yet — be the first to add one!'; reviewsEl.appendChild(el);
+      } else {
+        for (const r of localArr.slice().reverse()){
+          const el = document.createElement('div'); el.style.padding='8px'; el.style.marginBottom='8px'; el.style.background='rgba(255,255,255,0.02)'; el.style.borderRadius='6px';
+          el.innerHTML = `<div style="font-weight:700">${escapeHtml(r.author || 'Anonymous')} <span style='opacity:0.9;font-weight:600;margin-left:8px'>${r.rating?('• '+r.rating+' ★'):''}</span></div><div style='opacity:0.9;margin-top:6px'>${escapeHtml(r.text)}</div><div style='opacity:0.7;font-size:11px;margin-top:6px'>${new Date(r.at).toLocaleString()}</div>`;
+          reviewsEl.appendChild(el);
+        }
+      }
+    }
+
+    addReviewBtn.addEventListener('click', ()=>{
+      if (!currentModalMovie) return;
+      const author = (reviewAuthor.value||'').trim() || 'Anonymous';
+      const text = (reviewText.value||'').trim();
+      const rating = parseInt(reviewRating.value) || null;
+      if (!text) return alert('Please write a short review before submitting.');
+      const arr = loadLocalReviews(currentModalMovie);
+      arr.push({ author, text, rating, at: Date.now() });
+      saveLocalReviews(currentModalMovie, arr);
+      reviewAuthor.value=''; reviewText.value=''; reviewRating.value='5';
+      renderLocalReviews(arr);
+    });
+
+    clearReviewsBtn.addEventListener('click', ()=>{
+      if (!currentModalMovie) return;
+      if (!confirm('Clear all local reviews for this movie? This cannot be undone.')) return;
+      saveLocalReviews(currentModalMovie, []);
+      renderLocalReviews([]);
+    });
+
+    closeModal.onclick = ()=> closeModalFn();
+    modal.onclick = (e)=>{ if (e.target === modal) closeModalFn(); };
+    function closeModalFn(){ modal.classList.remove('show'); currentModalMovie=null; }
+
+    function escapeHtml(s){ return (s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
+
+    async function downloadImage(url, title){
+      try {
+        const res = await fetch(url, {mode:'cors'});
+        if (!res.ok) throw new Error('Failed to fetch image');
+        const blob = await res.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = (title || 'poster') + '.jpg';
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(a.href);
+      } catch (err){ alert('Unable to download image — CORS or network restriction.'); }
+    }
+
+    // TMDB helpers
+    const TMDB_GENRE_MAP = { 'Action': 28, 'Sci-Fi': 878, 'Drama': 18, 'Comedy':35, 'Romance':10749, 'Thriller':53, 'Fantasy':14, 'Animation':16 };
+
+    async function fetchMoviesForGenre(tmdbKey, genreName, targetCount=120){
+      const gid = TMDB_GENRE_MAP[genreName];
+      if (!gid) return [];
+      const results = [];
+      let page = 1; const maxPages = 20;
+      while (results.length < targetCount && page <= maxPages){
+        const url = `https://api.themoviedb.org/3/discover/movie?api_key=${tmdbKey}&with_genres=${gid}&sort_by=popularity.desc&page=${page}`;
+        try {
+          const r = await fetch(url);
+          if (!r.ok) break;
+          const j = await r.json();
+          for (const mv of (j.results||[])){
+            results.push({
+              id: `tmdb-${mv.id}`,
+              tmdbId: mv.id,
+              title: mv.title || mv.original_title,
+              genre: genreName,
+              poster: mv.poster_path ? `https://image.tmdb.org/t/p/w500${mv.poster_path}` : `https://picsum.photos/seed/tmdb-${genreName}-${mv.id}/500/750`,
+              desc: mv.overview || 'No description available'
+            });
+          }
+          if (j.total_pages && page >= j.total_pages) break;
+          page++;
+          await new Promise(r=>setTimeout(r,260));
+        } catch (err){ console.error('fetchMoviesForGenre error', err); break; }
+      }
+      return results.slice(0, targetCount);
+    }
+
+    async function fetchFromTMDB(apiKey){
+      const newData = {};
+      for (const g of GENRES){
+        loadReal.textContent = `Loading ${g}...`;
+        const movies = await fetchMoviesForGenre(apiKey, g, 120);
+        newData[g] = movies.length ? movies : (DATA[g] || []);
+      }
+      return newData;
+    }
+
+    loadReal.addEventListener('click', async ()=>{
+      const tmdbKey = (tmdbKeyInput.value||'').trim();
+      const omdbKey = (omdbKeyInput.value||'').trim();
+      if (!tmdbKey && !omdbKey){ alert('Please provide at least one API key (TMDB and/or OMDb) to fetch real data.'); return; }
+      loadReal.disabled = true; loadReal.innerHTML = '<span class="loader"></span> Loading...';
+      try {
+        if (tmdbKey){
+          const real = await fetchFromTMDB(tmdbKey);
+          DATA = real;
+        }
+        rehydrateCustomPosters();
+        currentPage = 1; activeGenre='All'; render();
+        alert('Done. Open a movie to see reviews (TMDB) and IMDb rating (OMDb) when applicable. Local reviews and custom posters are kept in your browser.');
+      } catch (err){ console.error(err); alert('Failed to load remote data. Check keys and network.'); }
+      loadReal.disabled = false; loadReal.textContent = 'Load Real Data';
+    });
+
+    // rehydrate stored posters and reviews on init
+    (function init(){ rehydrateCustomPosters(); perPageSel.value = '20'; render(); })();
+
+  </script>
+</body>
+</html>
