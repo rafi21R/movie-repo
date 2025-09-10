@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WebSeries Recommender — Expanded</title>
+  <style>
+    :root{--bg:#0b1220;--card:#0f1724;--muted:#9aa6b2;--accent:#06b6d4;--glass:rgba(255,255,255,0.03)}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter, system-ui, Arial;background:linear-gradient(180deg,#061221 0%,#071826 100%);color:#e6eef8}
+    header{padding:18px 24px;background:linear-gradient(90deg,#022b3a,#021826);display:flex;align-items:center;gap:12px}
+    header h1{margin:0;font-size:20px}
+    .app{max-width:1200px;margin:18px auto;padding:12px;display:grid;grid-template-columns:260px 1fr;gap:16px}
+    .sidebar{background:var(--card);padding:12px;border-radius:12px;min-height:70vh}
+    .brand{font-weight:700;margin-bottom:10px}
+    input,select,textarea{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:var(--glass);color:inherit}
+    .genres{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+    .genre{padding:8px;border-radius:8px;cursor:pointer}
+    .genre.active{background:linear-gradient(90deg, rgba(6,182,212,0.08), rgba(6,182,212,0.02));border:1px solid rgba(6,182,212,0.12)}
+    .main{padding:6px}
+    .toolbar{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:10px;border-radius:12px;border:1px solid rgba(255,255,255,0.03);display:flex;flex-direction:column;gap:8px}
+    .thumb{width:100%;height:130px;border-radius:8px;object-fit:cover;background:#08121b}
+    .title{font-weight:700}
+    .meta{display:flex;justify-content:space-between;align-items:center}
+    .small{font-size:13px;color:var(--muted)}
+    button{background:var(--accent);border:none;color:#022;padding:8px 10px;border-radius:8px;cursor:pointer}
+    .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(2,6,23,0.65);z-index:80}
+    .modal-card{background:#071522;padding:16px;border-radius:12px;width:720px;max-width:94%;color:#e6eef8}
+    .row{display:flex;gap:12px}
+    .col{flex:1}
+    .reviews{margin-top:12px;max-height:220px;overflow:auto;border-top:1px dashed rgba(255,255,255,0.04);padding-top:8px}
+    .review{padding:8px;border-radius:8px;background:rgba(255,255,255,0.01);margin-bottom:8px}
+    .director{font-size:13px;color:var(--muted);margin-top:6px}
+    footer{max-width:1200px;margin:10px auto;padding:12px;color:var(--muted);font-size:13px}
+    @media(max-width:900px){.app{grid-template-columns:1fr}.sidebar{height:auto}}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🎬 WebSeries Recommender — Expanded</h1>
+    <div style="margin-left:auto;color:var(--muted);font-size:13px">Local demo — data stored in your browser</div>
+  </header>
+
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">Filters & Controls</div>
+      <div style="margin-bottom:8px"><input id="search" placeholder="Search title, director or description..." /></div>
+      <div style="display:flex;gap:8px;margin-bottom:8px"><select id="sort"><option value="popular">Sort: Most reviewed</option><option value="rating">Sort: Highest rating</option><option value="alpha">A → Z</option></select></div>
+      <div style="font-size:13px;color:var(--muted);margin-top:6px">Genres</div>
+      <div id="genres" class="genres"></div>
+      <div style="margin-top:10px;font-size:12px;color:var(--muted)">Click any show card to open detail — director and career info available in details modal. You can upload an image when leaving a review (stored locally).</div>
+    </aside>
+
+    <main class="main">
+      <div class="toolbar">
+        <div style="font-weight:700" id="activeGenreLabel">All Genres</div>
+        <div style="flex:1"></div>
+        <div class="small">Shows: <span id="count">0</span></div>
+      </div>
+
+      <div id="grid" class="grid"></div>
+    </main>
+  </div>
+
+  <div id="modal" class="modal">
+    <div class="modal-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+        <div>
+          <div id="mTitle" style="font-weight:800;font-size:18px"></div>
+          <div id="mGenre" class="small" style="margin-top:4px"></div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button id="closeBtn" class="small">Close</button>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:12px">
+        <div style="flex:0 0 260px">
+          <img id="mImg" src="" alt="thumb" style="width:100%;height:160px;object-fit:cover;border-radius:8px" />
+          <div id="mDirector" class="director"></div>
+          <div id="mCareer" class="director" style="white-space:pre-wrap"></div>
+        </div>
+        <div class="col">
+          <div id="mDesc" class="small"></div>
+
+          <div style="margin-top:12px">
+            <label class="small">Your rating</label>
+            <select id="mRating"><option>5</option><option>4</option><option>3</option><option>2</option><option>1</option></select>
+            <textarea id="mReview" placeholder="Write a short review..." style="margin-top:8px"></textarea>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+              <input id="mImageInput" type="file" accept="image/*" />
+              <button id="saveReviewBtn">Save Review</button>
+            </div>
+          </div>
+
+          <div class="reviews" id="mReviews"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>Tip: This is a demo single-file app. Replace placeholder images with real posters and connect to a backend or API to make it production-ready.</footer>
+
+  <script>
+    // --------------------- Sample data ---------------------
+    // Each entry now includes director and career (short bio) and at least 10 shows per genre.
+    const dbGenres = {
+      "Fantasy": [
+        { title:"Game of Thrones", image:"https://via.placeholder.com/400x240?text=Game+of+Thrones", description:"Epic political fantasy in Westeros.", director:{name:"David Nutter", career:"Veteran TV director; known for genre TV and strong character episodes. Directed multiple GOT episodes."}},
+        { title:"The Witcher", image:"https://via.placeholder.com/400x240?text=The+Witcher", description:"A monster hunter struggles with destiny.", director:{name:"Alik Sakharov", career:"Cinematographer-turned-director with strong fantasy/action credits."}},
+        { title:"Shadow and Bone", image:"https://via.placeholder.com/400x240?text=Shadow+and+Bone", description:"A world divided by magic and war.", director:{name:"Eric Heisserer", career:"Writer/director; adapted complex fantasy novels for TV and film."}},
+        { title:"His Dark Materials", image:"https://via.placeholder.com/400x240?text=His+Dark+Materials", description:"Children traverse multiple worlds.", director:{name:"Otto Bathurst", career:"Known for atmospheric, literary adaptations and period pieces."}},
+        { title:"American Gods", image:"https://via.placeholder.com/400x240?text=American+Gods", description:"Old myths collide with modern life.", director:{name:"Bryan Fuller", career:"Creator of visually bold TV series; strong in fantasy and horror."}},
+        { title:"Merlin", image:"https://via.placeholder.com/400x240?text=Merlin", description:"A young wizard protects a prince.", director:{name:"Colin Teague", career:"Experienced TV director with family and fantasy credits."}},
+        { title:"Carnival Row", image:"https://via.placeholder.com/400x240?text=Carnival+Row", description:"A noir-ish fantasy city full of tension.", director:{name:"Jon Amiel", career:"Film and TV director with strong visual style in genre works."}},
+        { title:"Once Upon a Time", image:"https://via.placeholder.com/400x240?text=Once+Upon+a+Time", description:"Fairy-tale characters in modern times.", director:{name:"Mark Mylod", career:"Versatile director bridging comedy and drama in TV series."}},
+        { title:"The Magicians", image:"https://via.placeholder.com/400x240?text=The+Magicians", description:"College for magicians with dark twists.", director:{name:"John McNamara", career:"Longtime TV writer-producer with fantasy series experience."}},
+        { title:"Legend of the Seeker", image:"https://via.placeholder.com/400x240?text=Legend+of+the+Seeker", description:"Heroic quest-adventure adapted from novels.", director:{name:"Daniel Percival", career:"Action and adventure TV director with international credits."}}
+      ],
+
+      "Sci-Fi": [
+        { title:"Stranger Things", image:"https://via.placeholder.com/400x240?text=Stranger+Things", description:"Kids face otherworldly threats in the 80s.", director:{name:"The Duffer Brothers", career:"Creators known for nostalgic, character-driven sci-fi/horror."}},
+        { title:"Westworld", image:"https://via.placeholder.com/400x240?text=Westworld", description:"A park of android hosts becomes dangerous.", director:{name:"Jonathan Nolan", career:"Writer-producer with cerebral sci-fi credits and blockbuster experience."}},
+        { title:"Black Mirror", image:"https://via.placeholder.com/400x240?text=Black+Mirror", description:"Standalone episodes about tech gone wrong.", director:{name:"Charlie Brooker", career:"Creator/producer known for satirical, high-concept TV."}},
+        { title:"The Expanse", image:"https://via.placeholder.com/400x240?text=The+Expanse", description:"Political intrigue across the solar system.", director:{name:"Jeffrey Reiner", career:"TV director adept at large-scale sci-fi and action sequences."}},
+        { title:"Doctor Who", image:"https://via.placeholder.com/400x240?text=Doctor+Who", description:"A time-travelling alien saves worlds.", director:{name:"Euros Lyn", career:"Veteran TV director across drama and genre series."}},
+        { title:"Battlestar Galactica", image:"https://via.placeholder.com/400x240?text=Battlestar+Galactica", description:"Human survivors flee a deadly enemy in space.", director:{name:"Michael Rymer", career:"Known for character-driven genre television."}},
+        { title:"Altered Carbon", image:"https://via.placeholder.com/400x240?text=Altered+Carbon", description:"Consciousness transfer in a cyberpunk future.", director:{name:"Miguel Sapochnik", career:"Action-heavy director familiar with complex narratives and visuals."}},
+        { title:"Stargate SG-1", image:"https://via.placeholder.com/400x240?text=Stargate+SG-1", description:"Teams travel to other planets using a gate.", director:{name:"Peter DeLuise", career:"Longtime franchise director and writer in sci-fi TV."}},
+        { title:"Firefly", image:"https://via.placeholder.com/400x240?text=Firefly", description:"Space western following a rogue crew.", director:{name:"Joss Whedon", career:"Creator/director known for witty, ensemble-driven genre work."}},
+        { title:"Lost in Space", image:"https://via.placeholder.com/400x240?text=Lost+in+Space", description:"A family of colonists struggle after their ship is thrown off course.", director:{name:"Toby Haynes", career:"Director with experience in character-driven sci-fi and drama."}}
+      ],
+
+      "Drama": [
+        { title:"Breaking Bad", image:"https://via.placeholder.com/400x240?text=Breaking+Bad", description:"A chemistry teacher turns to crime.", director:{name:"Vince Gilligan", career:"Creator and showrunner known for meticulous storytelling and character arcs."}},
+        { title:"Better Call Saul", image:"https://via.placeholder.com/400x240?text=Better+Call+Saul", description:"The backstory of a morally flexible lawyer.", director:{name:"Peter Gould", career:"Writer/producer with deep roots in character-driven dramas."}},
+        { title:"The Crown", image:"https://via.placeholder.com/400x240?text=The+Crown", description:"The life and reign of Queen Elizabeth II.", director:{name:"Stephen Daldry", career:"Film and TV director with an eye for prestige period drama."}},
+        { title:"Mad Men", image:"https://via.placeholder.com/400x240?text=Mad+Men", description:"Advertising executives and their personal lives.", director:{name:"Alan Taylor", career:"Director across film and TV noted for period detail and tone."}},
+        { title:"Succession", image:"https://via.placeholder.com/400x240?text=Succession", description:"A wealthy family fights over corporate control.", director:{name:"Mark Mylod", career:"Director/producer excelling in tonal balance between drama and dark comedy."}},
+        { title:"House of Cards", image:"https://via.placeholder.com/400x240?text=House+of+Cards", description:"A ruthless politician's rise.", director:{name:"David Fincher", career:"Acclaimed director known for meticulous, moody filmmaking."}},
+        { title:"Ozark", image:"https://via.placeholder.com/400x240?text=Ozark", description:"Money-laundering family drama with escalating danger.", director:{name:"Jason Bateman", career:"Actor-director known for blending dark drama with character-focused storytelling."}},
+        { title:"The Sopranos", image:"https://via.placeholder.com/400x240?text=The+Sopranos", description:"Mob boss balances family and crime.", director:{name:"David Chase", career:"Creator of one of TV's most influential serialized dramas."}},
+        { title:"Boardwalk Empire", image:"https://via.placeholder.com/400x240?text=Boardwalk+Empire", description:"Prohibition-era politics and organized crime.", director:{name:"Martin Scorsese", career:"Legendary filmmaker who brought cinematic scale to TV's pilot episodes."}},
+        { title:"Peaky Blinders", image:"https://via.placeholder.com/400x240?text=Peaky+Blinders", description:"Gang family rebuilding after WWI.", director:{name:"Tom Harper", career:"Director experienced in gritty period storytelling."}}
+      ],
+
+      "Thriller": [
+        { title:"Mindhunter", image:"https://via.placeholder.com/400x240?text=Mindhunter", description:"FBI profiling of serial killers.", director:{name:"David Fincher", career:"Master of tone and tension in both film and TV."}},
+        { title:"Dexter", image:"https://via.placeholder.com/400x240?text=Dexter", description:"A forensic expert leads a double life.", director:{name:"Michael C. Hall", career:"Actor/producer associated with character-led television (note: show had multiple directors)."}},
+        { title:"True Detective", image:"https://via.placeholder.com/400x240?text=True+Detective", description:"Anthology crime series with philosophical detectives.", director:{name:"Cary Joji Fukunaga", career:"Director known for bold visuals and long takes in TV and film."}},
+        { title:"Hannibal", image:"https://via.placeholder.com/400x240?text=Hannibal", description:"A dark, psychological relationship between detective and psychiatrist.", director:{name:"Guillermo Navarro", career:"Cinematographer-turned-director skilled in visual storytelling."}},
+        { title:"You", image:"https://via.placeholder.com/400x240?text=You", description:"Obsessive romance with dangerous consequences.", director:{name:"Sera Gamble", career:"Showrunner and writer with experience in serialized thrillers."}},
+        { title:"Narcos", image:"https://via.placeholder.com/400x240?text=Narcos", description:"The rise of drug cartels and law enforcement response.", director:{name:"Jose Padilha", career:"Director with documentary and narrative strengths in crime drama."}},
+        { title:"Prison Break", image:"https://via.placeholder.com/400x240?text=Prison+Break", description:"Elaborate escape plots and conspiracies.", director:{name:"Bobby Roth", career:"TV director with strong pacing for action and tension."}},
+        { title:"The Night Manager", image:"https://via.placeholder.com/400x240?text=The+Night+Manager", description:"Spy thriller of infiltration and betrayal.", director:{name:"Susanne Bier", career:"Acclaimed director in both film and prestige television."}},
+        { title:"Bodyguard", image:"https://via.placeholder.com/400x240?text=Bodyguard", description:"Protection detail meets political intrigue.", director:{name:"Tom Shankland", career:"Director known for tight, suspenseful TV dramas."}},
+        { title:"Mr. Robot", image:"https://via.placeholder.com/400x240?text=Mr+Robot", description:"Hackers, paranoia and corporate intrigue.", director:{name:"Sam Esmail", career:"Creator/director with a strong visual signature in modern noir."}}
+      ],
+
+      "Comedy": [
+        { title:"Friends", image:"https://via.placeholder.com/400x240?text=Friends", description:"Iconic ensemble sitcom about friendship.", director:{name:"James Burrows", career:"One of sitcom television's most experienced directors."}},
+        { title:"The Office", image:"https://via.placeholder.com/400x240?text=The+Office", description:"Mockumentary of office life.", director:{name:"Greg Daniels", career:"Writer/producer who adapted UK show for US audiences."}},
+        { title:"Parks and Recreation", image:"https://via.placeholder.com/400x240?text=Parks+and+Recreation", description:"Local government comedy with heart.", director:{name:"Michael Schur", career:"Creator and writer known for blending comedy with warmth."}},
+        { title:"Brooklyn Nine-Nine", image:"https://via.placeholder.com/400x240?text=Brooklyn+Nine-Nine", description:"Police precinct workplace comedy.", director:{name:"Dean Holland", career:"Editor/director who helped shape modern TV comedy pacing."}},
+        { title:"How I Met Your Mother", image:"https://via.placeholder.com/400x240?text=HIMYM", description:"Romantic comedy told through memories.", director:{name:"Pamela Fryman", career:"Longtime sitcom director with sharp comedic instincts."}},
+        { title:"The Big Bang Theory", image:"https://via.placeholder.com/400x240?text=Big+Bang", description:"Nerd culture meets sitcom structure.", director:{name:"Mark Cendrowski", career:"Director specializing in sitcom rhythm and staging."}},
+        { title:"Scrubs", image:"https://via.placeholder.com/400x240?text=Scrubs", description:"Medical dramedy with surreal humor.", director:{name:"Adam Bernstein", career:"Versatile TV director across comedy and drama."}},
+        { title:"Arrested Development", image:"https://via.placeholder.com/400x240?text=Arrested+Development", description:"A dysfunctional family's comedic downfall.", director:{name:"Joe Russo", career:"One half of the Russo brothers; from TV comedy to blockbuster film."}},
+        { title:"Community", image:"https://via.placeholder.com/400x240?text=Community", description:"Meta-humor set in a community college.", director:{name:"Dan Harmon", career:"Creator known for inventive comedy and strong cult followings."}},
+        { title:"Modern Family", image:"https://via.placeholder.com/400x240?text=Modern+Family", description:"Mockumentary about contemporary family life.", director:{name:"Steven Levitan", career:"Writer/producer/director with a hit in family comedy."}}
+      ],
+
+      // Added three new genres: Documentary, Animation, Mystery
+      "Documentary": [
+        { title:"Making a Murderer", image:"https://via.placeholder.com/400x240?text=Making+a+Murderer", description:"Investigative documentary into a criminal case.", director:{name:"Laura Ricciardi", career:"Documentary filmmaker focused on long-form investigative work."}},
+        { title:"Planet Earth", image:"https://via.placeholder.com/400x240?text=Planet+Earth", description:"Epic nature documentary series.", director:{name:"Alastair Fothergill", career:"Producer/director renowned for natural history programming."}},
+        { title:"Tiger King", image:"https://via.placeholder.com/400x240?text=Tiger+King", description:"Bizarre true-crime documentary about big cat owners.", director:{name:"Eric Goode", career:"Producer/director with a focus on subcultures and documentary storytelling."}},
+        { title:"The Last Dance", image:"https://via.placeholder.com/400x240?text=The+Last+Dance", description:"Michael Jordan and the Bulls' dynasty.", director:{name:"Jason Hehir", career:"Sports documentary director with detailed archival storytelling."}},
+        { title:"Don't F**k With Cats", image:"https://via.placeholder.com/400x240?text=Dont+F%2A%2AK+With+Cats", description:"Online sleuthing and true crime.", director:{name:"Mark Lewis", career:"Documentary director known for crime-oriented films."}},
+        { title:"Chef's Table", image:"https://via.placeholder.com/400x240?text=Chefs+Table", description:"Visually sumptuous portraits of chefs.", director:{name:"David Gelb", career:"Filmmaker blending cinematic style with culinary storytelling."}},
+        { title:"The Staircase", image:"https://via.placeholder.com/400x240?text=The+Staircase", description:"Deep investigative look into a controversial trial.", director:{name:"Jean-Xavier de Lestrade", career:"Investigative documentary filmmaker with long-form projects."}},
+        { title:"Wild Wild Country", image:"https://via.placeholder.com/400x240?text=Wild+Wild+Country", description:"The rise and fall of a controversial commune.", director:{name:"Chai Vasarhelyi", career:"Director/producer with interest in character-driven nonfiction."}},
+        { title:"Free Solo", image:"https://via.placeholder.com/400x240?text=Free+Solo", description:"Intimate portrait of a rock climber's audacious climb.", director:{name:"Jimmy Chin", career:"Adventure-documentary filmmaker and mountaineer."}},
+        { title:"Making a Murderer Part 2", image:"https://via.placeholder.com/400x240?text=Making+a+Murderer+2", description:"Follow-up investigative episodes.", director:{name:"Laura Ricciardi", career:"See above — continued investigative series."}}
+      ],
+
+      "Animation": [
+        { title:"Rick and Morty", image:"https://via.placeholder.com/400x240?text=Rick+and+Morty", description:"Dimension-hopping sci-fi comedy.", director:{name:"Justin Roiland", career:"Co-creator and voice actor known for offbeat animation."}},
+        { title:"Avatar: The Last Airbender", image:"https://via.placeholder.com/400x240?text=Avatar", description:"Epic animated fantasy with deep themes.", director:{name:"Dave Filoni", career:"Animator and director known for expanding beloved universes."}},
+        { title:"BoJack Horseman", image:"https://via.placeholder.com/400x240?text=BoJack+Horseman", description:"Dark comedy about a washed-up sitcom actor.", director:{name:"Raphael Bob-Waksberg", career:"Creator/writer with a gift for blending comedy and pathos."}},
+        { title:"Archer", image:"https://via.placeholder.com/400x240?text=Archer", description:"Spy comedy with sharp writing.", director:{name:"Adam Reed", career:"Creator/director specializing in smart adult animation."}},
+        { title:"The Simpsons", image:"https://via.placeholder.com/400x240?text=The+Simpsons", description:"Long-running satirical animated sitcom.", director:{name:"Matt Groening", career:"Creator of landmark animated series across decades."}},
+        { title:"Gravity Falls", image:"https://via.placeholder.com/400x240?text=Gravity+Falls", description:"Mystery-adventure for all ages.", director:{name:"Alex Hirsch", career:"Creator known for clever plots and emotional beats."}},
+        { title:"Samurai Jack", image:"https://via.placeholder.com/400x240?text=Samurai+Jack", description:"Stylized action-adventure animation.", director:{name:"Genndy Tartakovsky", career:"Animator/director with a strong visual language."}},
+        { title:"Adventure Time", image:"https://via.placeholder.com/400x240?text=Adventure+Time", description:"Surreal fantasy adventures.", director:{name:"Pendleton Ward", career:"Creator with a unique blend of whimsy and depth."}},
+        { title:"South Park", image:"https://via.placeholder.com/400x240?text=South+Park", description:"Sharp political and cultural satire.", director:{name:"Trey Parker", career:"Co-creator and voice actor, known for provocative satire."}},
+        { title:"Castlevania", image:"https://via.placeholder.com/400x240?text=Castlevania", description:"Dark fantasy animation with mature themes.", director:{name:"Sam Deats", career:"Animator/director experienced in adapting games to serialized TV."}}
+      ],
+
+      "Mystery": [
+        { title:"Sherlock", image:"https://via.placeholder.com/400x240?text=Sherlock", description:"Modern take on classic detective stories.", director:{name:"Paul McGuigan", career:"Director known for stylish takes on drama and mystery."}},
+        { title:"Broadchurch", image:"https://via.placeholder.com/400x240?text=Broadchurch", description:"A small town is shaken by a tragic crime.", director:{name:"James Strong", career:"TV director with strong skills in emotional storytelling."}},
+        { title:"Twin Peaks", image:"https://via.placeholder.com/400x240?text=Twin+Peaks", description:"Surreal mystery with cult following.", director:{name:"David Lynch", career:"Filmmaker and TV creator with a distinctive surreal style."}},
+        { title:"Agatha Christie's Poirot", image:"https://via.placeholder.com/400x240?text=Poirot", description:"Classic detective adaptations.", director:{name:"David Suchet", career:"Renowned actor associated closely with role; series directors varied."}},
+        { title:"The Killing", image:"https://via.placeholder.com/400x240?text=The+Killing", description:"Police procedural with slow-burn atmosphere.", director:{name:"Agnethe Lien", career:"Director focusing on mood-driven crime storytelling."}},
+        { title:"Endeavour", image:"https://via.placeholder.com/400x240?text=Endeavour", description:"Young Morse solving complex cases.", director:{name:"Colin Teague", career:"Experienced in British crime and period drama."}},
+        { title:"Mare of Easttown", image:"https://via.placeholder.com/400x240?text=Mare+of+Easttown", description:"Local detective investigates a small-town murder.", director:{name:"Craig Zobel", career:"Director with strong work in serialized, character-led drama."}},
+        { title:"The Fall", image:"https://via.placeholder.com/400x240?text=The+Fall", description:"Cat-and-mouse between detective and killer.", director:{name:"Allan Cubitt", career:"Creator/director blending psychological depth with procedural beats."}},
+        { title:"Wallander", image:"https://via.placeholder.com/400x240?text=Wallander", description:"Detective series adapted from novels.", director:{name:"Philip Martin", career:"Director with experience in literary crime adaptations."}},
+        { title:"Inspector Morse", image:"https://via.placeholder.com/400x240?text=Inspector+Morse", description:"Classic British detective series.", director:{name:"Michael Simpson", career:"Veteran TV director of period and crime dramas."}}
+      ]
+    };
+
+    // Local storage key
+    const STORAGE_KEY = 'ws_recommender_expanded_v2';
+
+    // Merge stored reviews/images with db
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    if(stored.shows){
+      Object.keys(stored.shows).forEach(k=>{
+        const show = stored.shows[k];
+        // find by title across genres
+        for(const g of Object.keys(dbGenres)){
+          const found = dbGenres[g].find(s=>s.title===k);
+          if(found){
+            if(show.reviews) found.reviews = show.reviews;
+            if(show.image) found.image = show.image;
+          }
+        }
+      });
+    }
+
+    // --------------------- UI helpers ---------------------
+    const genresEl = document.getElementById('genres');
+    const gridEl = document.getElementById('grid');
+    const countEl = document.getElementById('count');
+    const activeGenreLabel = document.getElementById('activeGenreLabel');
+    const searchEl = document.getElementById('search');
+    const sortEl = document.getElementById('sort');
+
+    let activeGenre = null;
+
+    function buildGenreList(){
+      const all = document.createElement('div'); all.className='genre active'; all.textContent = `All Genres (${totalShows()})`;
+      all.onclick = ()=> setGenre(null);
+      genresEl.appendChild(all);
+      Object.keys(dbGenres).forEach(g=>{
+        const el = document.createElement('div'); el.className='genre'; el.textContent = `${g} (${dbGenres[g].length})`;
+        el.onclick = ()=> setGenre(g);
+        genresEl.appendChild(el);
+      });
+    }
+
+    function totalShows(){ return Object.keys(dbGenres).reduce((acc,k)=>acc+dbGenres[k].length,0); }
+
+    function setGenre(g){ activeGenre = g; activeGenreLabel.textContent = g || 'All Genres'; Array.from(genresEl.children).forEach(ch=> ch.classList.toggle('active', ch.textContent.startsWith(g||'All Genres'))); renderGrid(); }
+
+    function avgRating(show){ if(!show.reviews || show.reviews.length===0) return 0; return Math.round((show.reviews.reduce((a,b)=>a+b.rating,0)/show.reviews.length)*10)/10; }
+
+    function renderGrid(){
+      const q = (searchEl.value||'').toLowerCase().trim();
+      let list = [];
+      Object.keys(dbGenres).forEach(g=>{
+        dbGenres[g].forEach(s=> list.push(Object.assign({},s,{genre:g})));
+      });
+      if(activeGenre) list = list.filter(x=> x.genre===activeGenre);
+      if(q) list = list.filter(s=> (s.title + ' ' + (s.description||'') + ' ' + (s.director?.name||'') ).toLowerCase().includes(q));
+
+      const sort = sortEl.value;
+      if(sort==='rating') list.sort((a,b)=> avgRating(b) - avgRating(a));
+      else if(sort==='alpha') list.sort((a,b)=> a.title.localeCompare(b.title));
+      else list.sort((a,b)=> (b.reviews?.length||0) - (a.reviews?.length||0));
+
+      countEl.textContent = list.length;
+      gridEl.innerHTML = '';
+
+      list.forEach(s=>{
+        const card = document.createElement('div'); card.className='card';
+        const img = document.createElement('img'); img.className='thumb'; img.src = s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image || s.image; // silly fallback not needed
+        img.alt = s.title;
+        img.onerror = ()=> img.src = 'https://via.placeholder.com/400x240?text=Image+not+found';
+        img.addEventListener('click', ()=> openModal(s));
+        card.appendChild(img);
+
+        const t = document.createElement('div'); t.className='title'; t.textContent = s.title; card.appendChild(t);
+        const d = document.createElement('div'); d.className='small'; d.textContent = s.genre; card.appendChild(d);
+        const p = document.createElement('div'); p.className='small'; p.textContent = s.description; card.appendChild(p);
+
+        const meta = document.createElement('div'); meta.className='meta';
+        const left = document.createElement('div'); left.className='small'; left.textContent = `Director: ${s.director?.name || '—'}`;
+        const right = document.createElement('div'); right.innerHTML = `${avgRating(s) || 0} ★ ${s.reviews?.length?`(${s.reviews.length})` : ''}`;
+        meta.appendChild(left); meta.appendChild(right);
+        card.appendChild(meta);
+
+        gridEl.appendChild(card);
+      });
+    }
+
+    // --------------------- Modal + Reviews ---------------------
+    const modal = document.getElementById('modal');
+    const mTitle = document.getElementById('mTitle');
+    const mImg = document.getElementById('mImg');
+    const mDesc = document.getElementById('mDesc');
+    const mDirector = document.getElementById('mDirector');
+    const mCareer = document.getElementById('mCareer');
+    const mRating = document.getElementById('mRating');
+    const mReview = document.getElementById('mReview');
+    const mImageInput = document.getElementById('mImageInput');
+    const mReviews = document.getElementById('mReviews');
+    const closeBtn = document.getElementById('closeBtn');
+    const saveReviewBtn = document.getElementById('saveReviewBtn');
+
+    let currentShow = null;
+
+    function openModal(show){
+      currentShow = show;
+      mTitle.textContent = show.title;
+      mImg.src = show.image || 'https://via.placeholder.com/400x240?text=No+Image';
+      mDesc.textContent = show.description;
+      mDirector.textContent = `Director: ${show.director?.name || '—'}`;
+      mCareer.textContent = show.director?.career || '';
+      mRating.value = '5';
+      mReview.value = '';
+      delete mImg.dataset.newImage;
+      renderModalReviews();
+      modal.style.display = 'flex';
+    }
+
+    function renderModalReviews(){
+      mReviews.innerHTML = '';
+      const list = currentShow.reviews || [];
+      if(list.length===0){ mReviews.innerHTML = '<div class="small" style="color:var(--muted)">No reviews yet.</div>'; return; }
+      list.slice().reverse().forEach(r=>{
+        const el = document.createElement('div'); el.className='review';
+        const top = document.createElement('div'); top.style.fontWeight='700'; top.textContent = '★'.repeat(r.rating) + ' ' + new Date(r.ts).toLocaleString();
+        el.appendChild(top);
+        const text = document.createElement('div'); text.className='small'; text.style.color='var(--muted)'; text.textContent = r.text;
+        el.appendChild(text);
+        if(r.image){ const im = document.createElement('img'); im.src = r.image; im.style.width='100%'; im.style.marginTop='8px'; im.style.borderRadius='6px'; el.appendChild(im); }
+        mReviews.appendChild(el);
+      });
+    }
+
+    mImageInput.addEventListener('change', e=>{
+      const f = e.target.files[0]; if(!f) return;
+      const reader = new FileReader(); reader.onload = ()=>{ mImg.src = reader.result; mImg.dataset.newImage = reader.result; };
+      reader.readAsDataURL(f);
+    });
+
+    saveReviewBtn.addEventListener('click', ()=>{
+      if(!currentShow) return;
+      const r = { rating: parseInt(mRating.value||5), text: mReview.value||'', ts: Date.now() };
+      if(mImg.dataset.newImage) r.image = mImg.dataset.newImage;
+      currentShow.reviews = currentShow.reviews || [];
+      currentShow.reviews.push(r);
+      // if user uploaded image, set it as show image
+      if(r.image) currentShow.image = r.image;
+      persistShow(currentShow);
+      renderModalReviews(); renderGrid();
+      alert('Review saved locally in your browser.');
+    });
+
+    closeBtn.addEventListener('click', ()=>{ modal.style.display='none'; });
+
+    // Persist reviews/images per show title
+    function persistShow(show){
+      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      stored.shows = stored.shows || {};
+      stored.shows[show.title] = { reviews: show.reviews || [], image: show.image || '' };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+    }
+
+    // --------------------- init ---------------------
+    buildGenreList(); renderGrid();
+    searchEl.addEventListener('input', ()=> renderGrid());
+    sortEl.addEventListener('change', ()=> renderGrid());
+
+    // Expose for debugging
+    window.__ws = { dbGenres, renderGrid, persistShow };
+  </script>
+</body>
+</html>
